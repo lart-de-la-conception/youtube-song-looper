@@ -27,3 +27,23 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Hide WebKit datalist dropdown arrow and clear button for a cleaner input */
+input[list]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  display: none;
+}
+input::-webkit-search-cancel-button,
+input::-webkit-contacts-auto-fill-button,
+input::-webkit-credentials-auto-fill-button {
+  display: none !important;
+}
+
+/* Toast entry animation */
+@keyframes toast-in {
+  from { transform: translateY(6px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.animate-toast-in {
+  animation: toast-in .18s ease-out both;
+}

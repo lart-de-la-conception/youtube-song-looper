@@ -21,6 +21,7 @@ class LoopedVideoResponse(BaseModel):
     created_at: datetime
     last_played_at: datetime
     is_favorite: bool
+    is_deleted: bool
 
     class Config:
         orm_mode = True

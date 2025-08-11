@@ -19,4 +19,5 @@ class LoopedVideo(Base):
     user_id = Column(String, nullable=True, index=True)
     play_count = Column(Integer, default=1)
     is_favorite = Column(Boolean, default=False, nullable=False, index=True)
+    is_deleted = Column(Boolean, default=False, nullable=False, index=True)
 

@@ -1,8 +1,9 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import YouTube from 'react-youtube';  
-import { MdHistory, MdStar, MdStarBorder } from 'react-icons/md';
+import { MdHistory, MdStar, MdStarBorder, MdDelete } from 'react-icons/md';
 import axios from 'axios';
+import Toast, { ToastItem } from '@/components/Toast';
 
 
 type LoopedSong = {
@@ -18,6 +19,7 @@ type LoopedSong = {
 
 export default function Home() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [urlInputText, setUrlInputText] = useState('');
   const [loopMinutes, setLoopMinutes] = useState('');
   const [submittedLoopMinutes, setSubmittedLoopMinutes] = useState('');
   const [videoId, setVideoId] = useState<string | null>(null);
@@ -29,6 +31,53 @@ export default function Home() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [error, setError] = useState('');
   const [videoTitle, setVideoTitle] = useState('');
+  // saving state for submit
+  const [isSaving, setIsSaving] = useState(false);
+  // toast state
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  // toast helper
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    const id = Date.now() + Math.floor(Math.random() * 1000);
+    setToasts((t) => [...t, { id, type, text }]);
+    setTimeout(() => {
+      setToasts((t) => t.filter((x) => x.id !== id));
+    }, 2500);
+  };
+
+  // BATCH UNDO - to restore state after a delete operation(s)
+  // how long the user can undo after delete (in ms)
+  const UNDO_MS = 10000;
+
+  type PendingEntry = {
+    item: LoopedSong;
+    timer: number;       // setTimeout id
+    expires: number;     // Date.now() + UNDO_MS
+  };
+
+  // key by video_id
+  const [pendingUndos, setPendingUndos] = useState<Record<string, PendingEntry>>({});
+
+  // Undo all pending deletes: clear timers, recreate rows, refresh
+  const undoAllDeletes = async () => {
+    const entries = Object.values(pendingUndos);
+    if (entries.length === 0) return;
+    // stop scheduled expirations
+    entries.forEach((e) => clearTimeout(e.timer));
+    try {
+      await Promise.all(
+        entries.map((e) =>
+          axios.patch(`http://localhost:8000/api/looped-songs/${e.item.video_id}/restore`, null, { params: { user_id: '' } })
+        )
+      );
+      setPendingUndos({});
+      await refreshHistoryWithCurrentSort();
+      showToast('Restored item(s)', 'success');
+    } catch (err) {
+      console.error('Failed to restore items:', err);
+      showToast('Could not restore items', 'error');
+    }
+  };
 
   // History panel state
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -41,6 +90,48 @@ export default function Home() {
   const playerRef = useRef<any | null>(null);
 
   const loopDurationMs = Number(loopMinutes) > 0 ? Number(loopMinutes) * 60 * 1000 : 0; // Convert minutes to milliseconds for easier comparison
+
+  // Refresh history with current sort
+  const refreshHistoryWithCurrentSort = async () => {
+    const base = 'http://localhost:8000/api/looped-songs';
+    const url = sortBy === 'recent' ? `${base}?sort=recent`
+      : sortBy === 'plays' ? `${base}?sort=plays`
+      : base;
+    const res = await fetch(url);
+    if (res.ok) setHistory(await res.json());
+  };
+
+  // Delete a history item
+  const deleteHistoryItem = async (item: LoopedSong) => {
+    // optimistic UI
+    setHistory(h => h.filter(i => i.video_id !== item.video_id));
+    
+    try {
+      await axios.delete(`http://localhost:8000/api/looped-songs/${item.video_id}`, { params: { user_id: '' } });
+      // add to pending undo map
+      const expires = Date.now() + UNDO_MS;
+      const timer = window.setTimeout(() => {
+        // remove from pending once window passes
+        setPendingUndos((pendingByVideoId) => {
+          const { [item.video_id]: _, ...rest } = pendingByVideoId;
+          return rest;
+        });
+      }, UNDO_MS);
+      setPendingUndos((pendingByVideoId) => ({
+        ...pendingByVideoId,
+        [item.video_id]: { item, timer, expires },
+      }));
+
+      // refresh history
+      showToast('Removed from history', 'success');
+      refreshHistoryWithCurrentSort();
+    } catch (err) {
+      console.error('Failed to delete history item:', err);
+      showToast('Could not remove from history', 'error');
+      // restore optimistic UI
+      setHistory(h => [...h, item]);
+    }
+  };
 
   // Updates elapsed time counter every second while video is looping
   // Resets counter when looping stops or component unmounts
@@ -106,6 +197,8 @@ export default function Home() {
     setIsLooping(true);
     setElapsedTime(0);
     event.target.playVideo();
+    // Refresh history when a video successfully starts
+    void refreshHistoryWithCurrentSort();
   };
 
   // Fixing the issue where the elapsed time does not reflect when the video is paused
@@ -158,7 +251,7 @@ export default function Home() {
   /**
    * Handles the form submission: extracts the video ID from the input URL, sets the video ID state, and marks the form as submitted.
    */
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loopMinutes || Number(loopMinutes) <= 0) {
       setError('Please enter a valid loop duration (in minutes).');
@@ -169,25 +262,33 @@ export default function Home() {
     }
     setError('');
     setSubmittedLoopMinutes(loopMinutes);
+
     // Extract id from URL and validate
     const idFromUrl = extractVideoId(youtubeUrl);
     if (!idFromUrl) {
       setError('Please enter a valid YouTube URL.');
       return;
     }
+
     // save the looped song to the database
-    axios.post('http://localhost:8000/api/saveloopedsong', {
-      video_id: idFromUrl,
-      title: videoTitle || '',
-      loop_duration: Number(loopMinutes),
-      user_id: '',
-    })
-    .then(response => {
-      console.log(response.data);
-    })
-    .catch(error => {
-      console.error('Error saving looped song:', error);
-    });
+    try {
+      setIsSaving(true);
+      const resp = await axios.post('http://localhost:8000/api/saveloopedsong', {
+        video_id: idFromUrl,
+        title: videoTitle || '',
+        loop_duration: Number(loopMinutes),
+        user_id: '',
+      });
+      console.log(resp.data);
+      showToast('Saved to history', 'success');
+      // Refresh history to reflect updated play_count / ordering
+      void refreshHistoryWithCurrentSort();
+    } catch (err) {
+      console.error('Error saving looped song:', err);
+      showToast("Couldn't save. Try again.", 'error');
+    } finally {
+      setIsSaving(false);
+    }
 
     // If the same video is already loaded, reset and play from start
     if (videoId && idFromUrl === videoId && playerRef.current) {
@@ -196,7 +297,6 @@ export default function Home() {
       setTimePassed(0);
       setElapsedTime(0);
       setLoopStartTime(Date.now());
-      // Seek to start and play
       try {
         playerRef.current.seekTo(0, true);
         playerRef.current.playVideo();
@@ -272,18 +372,7 @@ export default function Home() {
         loop_duration: item.loop_duration,
         user_id: '',
       });
-      const base = 'http://localhost:8000/api/looped-songs';
-      const url =
-        sortBy === 'recent'
-          ? `${base}?sort=recent`
-          : sortBy === 'plays'
-          ? `${base}?sort=plays`
-          : base;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data: LoopedSong[] = await res.json();
-        setHistory(data);
-      }
+      await refreshHistoryWithCurrentSort();
     } catch (err) {
       console.error('Failed to update play count from history:', err);
     }
@@ -293,9 +382,10 @@ export default function Home() {
   const toggleFavorite = async (item: LoopedSong) => {
     try {
       const base = `http://localhost:8000/api/looped-songs/${item.video_id}/favorite`;
-      // Pass user_id if you use one; keeping empty string consistent with saves
+      // Send explicit state for idempotency
       await axios.patch(base, { is_favorite: !item.is_favorite }, { params: { user_id: '' } });
-      // Refetch with current sort
+      showToast(item.is_favorite ? 'Removed from favorites' : 'Added to favorites', 'success');
+      // Refetch with current sort to reflect authoritative value
       const listBase = 'http://localhost:8000/api/looped-songs';
       const url =
         sortBy === 'recent'
@@ -310,6 +400,7 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Failed to toggle favorite:', err);
+      showToast('Could not update favorite', 'error');
     }
   };
 
@@ -339,12 +430,26 @@ export default function Home() {
             <MdStarBorder className="text-gray-400" size={18} />
           )}
         </button>
+        <button
+          aria-label="Delete"
+          onClick={(e) => { e.stopPropagation(); deleteHistoryItem(item); }}
+          className="p-2 rounded hover:bg-gray-100 transition"
+        >
+          <MdDelete className="text-gray-400" size={18} />
+        </button>
       </div>
     );
   };
 
   return (
     <main className="relative flex min-h-screen flex-col bg-white">
+      {/* Toasts */}
+      <Toast
+        toasts={toasts}
+        onClose={(id) => setToasts((t) => t.filter((x) => x.id !== id))}
+        position="bottom-right"
+      />
+
       {/* History toggle */}
       <button
         aria-label="Toggle history"
@@ -405,6 +510,21 @@ export default function Home() {
               Recently added
             </button>
           </div>
+
+          {/* Undo deleted items banner (batch) */}
+          {Object.keys(pendingUndos).length > 0 && (
+            <div className="mt-3 flex items-center justify-between rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-800">
+              <span>
+                Removed {Object.keys(pendingUndos).length} item{Object.keys(pendingUndos).length > 1 ? 's' : ''}. Press Undo if it was a mistake.
+              </span>
+              <button
+                onClick={undoAllDeletes}
+                className="ml-3 rounded bg-black px-2 py-1 text-xs text-white hover:bg-black/80"
+              >
+                Undo
+              </button>
+            </div>
+          )}
         </div>
         {historyLoading && <div className="text-sm text-gray-500">Loading…</div>}
         {historyError && <div className="text-sm text-red-500">{historyError}</div>}
@@ -470,9 +590,16 @@ export default function Home() {
           )}
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-light py-2 rounded-md hover:bg-blue-700 transition text-base tracking-wide shadow-sm"
+            disabled={isSaving}
+            aria-busy={isSaving}
+            className="w-full bg-blue-600 text-white font-light py-2 rounded-md hover:bg-blue-700 transition text-base tracking-wide shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Load & Loop
+            <span className="inline-flex items-center justify-center gap-2">
+              {isSaving && (
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
+              )}
+              <span>{isSaving ? 'Saving…' : 'Load & Loop'}</span>
+            </span>
           </button>
         </form>
         {videoId && (
