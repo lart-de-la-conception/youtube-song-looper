@@ -1,0 +1,12 @@
+.env
+.env.*
+database.db
+database.db-journal
+.sqlite3
+.db
+.db-journal
+venv/
+pycache_/
+.pyc
+.pytest_cache/
+.DS_Store
