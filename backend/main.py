@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Response
+from fastapi import FastAPI, Depends, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -15,6 +15,7 @@ from datetime import datetime
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
@@ -29,10 +30,27 @@ def get_db():
     finally:
         db.close()
 
+# Anonymous cookie-based user id
+COOKIE_NAME = "anon_uid"
+COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
+
+def get_user_id(request: Request, response: Response) -> str:
+    uid = request.cookies.get(COOKIE_NAME)
+    if not uid:
+        uid = str(uuid.uuid4())
+        response.set_cookie(
+            key=COOKIE_NAME,
+            value=uid,
+            max_age=COOKIE_MAX_AGE,
+            samesite="lax",
+            secure=False,   # set True when behind HTTPS
+            httponly=True,
+        )
+    return uid
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[FRONTEND_ORIGIN],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,8 +61,8 @@ def read_root():
     return {"message": "Hello, World!"}
 
 @app.get("/api/looped-songs", response_model=List[LoopedVideoResponse])
-def get_looped_songs(sort: Optional[str] = None, db: Session = Depends(get_db)):
-    q = db.query(LoopedVideo).filter(LoopedVideo.is_deleted == False)
+def get_looped_songs(sort: Optional[str] = None, db: Session = Depends(get_db), user_id: str = Depends(get_user_id)):
+    q = db.query(LoopedVideo).filter(LoopedVideo.user_id == user_id, LoopedVideo.is_deleted == False)
     # Always show favorites first
     order_cols = [desc(LoopedVideo.is_favorite)]
     if sort == "recent":
@@ -58,11 +76,11 @@ def get_looped_songs(sort: Optional[str] = None, db: Session = Depends(get_db)):
 
 # function to save looped song to database for user to keep track of their looped songs 
 @app.post("/api/saveloopedsong", response_model=LoopedVideoResponse)
-def save_looped_song(song: LoopedVideoCreate, db: Session = Depends(get_db)):
+def save_looped_song(song: LoopedVideoCreate, db: Session = Depends(get_db), user_id: str = Depends(get_user_id)):
     # Look up regardless of deletion state so we can restore if needed
     existing = db.query(LoopedVideo).filter(
         LoopedVideo.video_id == song.video_id,
-        LoopedVideo.user_id == song.user_id,
+        LoopedVideo.user_id == user_id,
     ).first()
 
     now = datetime.utcnow()
@@ -96,7 +114,7 @@ def save_looped_song(song: LoopedVideoCreate, db: Session = Depends(get_db)):
         video_id=song.video_id,
         title=song.title,
         loop_duration=song.loop_duration,
-        user_id=song.user_id,
+        user_id=user_id,
         play_count=1,
         last_played_at=now,
         is_deleted=False,
@@ -107,7 +125,7 @@ def save_looped_song(song: LoopedVideoCreate, db: Session = Depends(get_db)):
     return db_song
 
 @app.patch("/api/looped-songs/{video_id}/favorite", response_model=LoopedVideoResponse)
-def set_favorite(video_id: str, payload: FavoriteUpdate, user_id: Optional[str] = None, db: Session = Depends(get_db)):
+def set_favorite(video_id: str, payload: FavoriteUpdate, db: Session = Depends(get_db), user_id: str = Depends(get_user_id)):
     item = db.query(LoopedVideo).filter(LoopedVideo.video_id == video_id, LoopedVideo.user_id == user_id, LoopedVideo.is_deleted == False).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -118,7 +136,7 @@ def set_favorite(video_id: str, payload: FavoriteUpdate, user_id: Optional[str] 
     return item
 
 @app.delete("/api/looped-songs/{video_id}", status_code=204)
-def soft_delete_looped_song(video_id: str, user_id: Optional[str] = None, db: Session = Depends(get_db)):
+def soft_delete_looped_song(video_id: str, db: Session = Depends(get_db), user_id: str = Depends(get_user_id)):
     """Soft-delete a single history entry for the given (user_id, video_id)."""
     item = db.query(LoopedVideo).filter(
         LoopedVideo.video_id == video_id,
@@ -132,7 +150,7 @@ def soft_delete_looped_song(video_id: str, user_id: Optional[str] = None, db: Se
     return Response(status_code=204)
 
 @app.patch("/api/looped-songs/{video_id}/restore", response_model=LoopedVideoResponse)
-def restore_looped_song(video_id: str, user_id: Optional[str] = None, db: Session = Depends(get_db)):
+def restore_looped_song(video_id: str, db: Session = Depends(get_db), user_id: str = Depends(get_user_id)):
     item = db.query(LoopedVideo).filter(
         LoopedVideo.video_id == video_id,
         LoopedVideo.user_id == user_id,

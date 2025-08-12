@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import YouTube from 'react-youtube';  
 import { MdHistory, MdStar, MdStarBorder, MdDelete } from 'react-icons/md';
 import axios from 'axios';
+axios.defaults.withCredentials = true;
 import Toast, { ToastItem } from '@/components/Toast';
 
 
@@ -67,7 +68,7 @@ export default function Home() {
     try {
       await Promise.all(
         entries.map((e) =>
-          axios.patch(`http://localhost:8000/api/looped-songs/${e.item.video_id}/restore`, null, { params: { user_id: '' } })
+          axios.patch(`http://localhost:8000/api/looped-songs/${e.item.video_id}/restore`)
         )
       );
       setPendingUndos({});
@@ -97,7 +98,7 @@ export default function Home() {
     const url = sortBy === 'recent' ? `${base}?sort=recent`
       : sortBy === 'plays' ? `${base}?sort=plays`
       : base;
-    const res = await fetch(url);
+    const res = await fetch(url, { credentials: 'include' });
     if (res.ok) setHistory(await res.json());
   };
 
@@ -107,7 +108,7 @@ export default function Home() {
     setHistory(h => h.filter(i => i.video_id !== item.video_id));
     
     try {
-      await axios.delete(`http://localhost:8000/api/looped-songs/${item.video_id}`, { params: { user_id: '' } });
+      await axios.delete(`http://localhost:8000/api/looped-songs/${item.video_id}`);
       // add to pending undo map
       const expires = Date.now() + UNDO_MS;
       const timer = window.setTimeout(() => {
@@ -162,7 +163,7 @@ export default function Home() {
             : sortBy === 'plays'
             ? `${base}?sort=plays`
             : base; // 'added' falls back to default ordering
-        const res = await fetch(url);
+        const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) throw new Error('Failed to fetch history');
         const data: LoopedSong[] = await res.json();
         setHistory(data);
@@ -277,7 +278,6 @@ export default function Home() {
         video_id: idFromUrl,
         title: videoTitle || '',
         loop_duration: Number(loopMinutes),
-        user_id: '',
       });
       console.log(resp.data);
       showToast('Saved to history', 'success');
@@ -370,7 +370,6 @@ export default function Home() {
         video_id: item.video_id,
         title: item.title,
         loop_duration: item.loop_duration,
-        user_id: '',
       });
       await refreshHistoryWithCurrentSort();
     } catch (err) {
@@ -383,7 +382,7 @@ export default function Home() {
     try {
       const base = `http://localhost:8000/api/looped-songs/${item.video_id}/favorite`;
       // Send explicit state for idempotency
-      await axios.patch(base, { is_favorite: !item.is_favorite }, { params: { user_id: '' } });
+      await axios.patch(base, { is_favorite: !item.is_favorite });
       showToast(item.is_favorite ? 'Removed from favorites' : 'Added to favorites', 'success');
       // Refetch with current sort to reflect authoritative value
       const listBase = 'http://localhost:8000/api/looped-songs';
