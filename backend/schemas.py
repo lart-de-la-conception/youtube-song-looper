@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -23,5 +23,5 @@ class LoopedVideoResponse(BaseModel):
     is_favorite: bool
     is_deleted: bool
 
-    class Config:
-        orm_mode = True
+    # Pydantic v2: enable SQLAlchemy ORM compatibility
+    model_config = ConfigDict(from_attributes=True)

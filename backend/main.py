@@ -2,8 +2,8 @@ from fastapi import FastAPI, Depends, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from models import LoopedVideo, Base
-from schemas import LoopedVideoCreate, LoopedVideoResponse, FavoriteUpdate
+from backend.models import LoopedVideo, Base
+from backend.schemas import LoopedVideoCreate, LoopedVideoResponse, FavoriteUpdate
 import uuid
 
 from sqlalchemy import create_engine, desc
@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from dotenv import load_dotenv
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
@@ -83,7 +83,7 @@ def save_looped_song(song: LoopedVideoCreate, db: Session = Depends(get_db), use
         LoopedVideo.user_id == user_id,
     ).first()
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     if existing:
         # If this row was soft-deleted, restore it and preserve attributes
