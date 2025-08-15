@@ -2,8 +2,13 @@ from fastapi import FastAPI, Depends, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from backend.models import LoopedVideo, Base
-from backend.schemas import LoopedVideoCreate, LoopedVideoResponse, FavoriteUpdate
+# Allow running as either `backend.main` (repo root) or `main` (inside backend/)
+try:
+    from backend.models import LoopedVideo, Base
+    from backend.schemas import LoopedVideoCreate, LoopedVideoResponse, FavoriteUpdate
+except ImportError:  # running from backend/ as top-level module
+    from models import LoopedVideo, Base
+    from schemas import LoopedVideoCreate, LoopedVideoResponse, FavoriteUpdate
 import uuid
 
 from sqlalchemy import create_engine, desc
