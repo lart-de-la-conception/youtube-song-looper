@@ -44,6 +44,10 @@ COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 # In production, set COOKIE_SECURE=true so the cookie is only sent over HTTPS.
 # For local development keep it false via backend/.env (do not change code).
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+# SameSite policy: use "lax" for same-site dev, "none" for cross-site production
+COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax").lower()
+if COOKIE_SAMESITE not in {"lax", "none", "strict"}:
+    COOKIE_SAMESITE = "lax"
 
 def get_user_id(request: Request, response: Response) -> str:
     uid = request.cookies.get(COOKIE_NAME)
@@ -53,7 +57,7 @@ def get_user_id(request: Request, response: Response) -> str:
             key=COOKIE_NAME,
             value=uid,
             max_age=COOKIE_MAX_AGE,
-            samesite="lax",
+            samesite=COOKIE_SAMESITE,  # "none" for cross-site (requires Secure)
             secure=COOKIE_SECURE,  # true in prod (HTTPS), false in local dev
             httponly=True,
         )
