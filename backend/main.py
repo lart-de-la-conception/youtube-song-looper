@@ -21,7 +21,10 @@ from datetime import datetime, UTC
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+# Use SQLite-specific connect args only when using SQLite
+sqlite_connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=sqlite_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
 
@@ -38,6 +41,9 @@ def get_db():
 # Anonymous cookie-based user id
 COOKIE_NAME = "anon_uid"
 COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
+# In production, set COOKIE_SECURE=true so the cookie is only sent over HTTPS.
+# For local development keep it false via backend/.env (do not change code).
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
 def get_user_id(request: Request, response: Response) -> str:
     uid = request.cookies.get(COOKIE_NAME)
@@ -48,7 +54,7 @@ def get_user_id(request: Request, response: Response) -> str:
             value=uid,
             max_age=COOKIE_MAX_AGE,
             samesite="lax",
-            secure=False,   # set True when behind HTTPS
+            secure=COOKIE_SECURE,  # true in prod (HTTPS), false in local dev
             httponly=True,
         )
     return uid

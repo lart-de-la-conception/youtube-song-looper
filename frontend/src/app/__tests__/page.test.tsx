@@ -4,7 +4,7 @@ import Home from '../page';
 import axios from 'axios';
 
 // Mock react-youtube to capture props for invoking onReady/onEnd in tests
-jest.mock('react-youtube', () => (props: any) => {
+jest.mock('react-youtube', () => (props: { onReady?: Function; onEnd?: Function; onStateChange?: Function }) => {
   (global as any).__ytProps = props;
   return <div data-testid="yt-player" />;
 });

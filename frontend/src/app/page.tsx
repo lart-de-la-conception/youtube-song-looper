@@ -6,6 +6,9 @@ import axios from 'axios';
 axios.defaults.withCredentials = true;
 import Toast, { ToastItem } from '@/components/Toast';
 
+// Backend API base URL (env-driven; falls back to localhost for dev/tests)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 
 type LoopedSong = {
   id: string;
@@ -67,9 +70,7 @@ export default function Home() {
     entries.forEach((e) => clearTimeout(e.timer));
     try {
       await Promise.all(
-        entries.map((e) =>
-          axios.patch(`http://localhost:8000/api/looped-songs/${e.item.video_id}/restore`)
-        )
+        entries.map((e) => axios.patch(`${API_URL}/api/looped-songs/${e.item.video_id}/restore`))
       );
       setPendingUndos({});
       await refreshHistoryWithCurrentSort();
@@ -88,13 +89,13 @@ export default function Home() {
   const [sortBy, setSortBy] = useState<'recent' | 'plays' | 'added'>('recent');
 
   // Ref to the underlying YouTube player instance
-  const playerRef = useRef<any | null>(null);
+  const playerRef = useRef<{ seekTo: (t: number, allowSeekAhead?: boolean) => void; playVideo: () => void } | null>(null);
 
   const loopDurationMs = Number(loopMinutes) > 0 ? Number(loopMinutes) * 60 * 1000 : 0; // Convert minutes to milliseconds for easier comparison
 
   // Refresh history with current sort
   const refreshHistoryWithCurrentSort = async () => {
-    const base = 'http://localhost:8000/api/looped-songs';
+    const base = `${API_URL}/api/looped-songs`;
     const url = sortBy === 'recent' ? `${base}?sort=recent`
       : sortBy === 'plays' ? `${base}?sort=plays`
       : base;
@@ -108,7 +109,7 @@ export default function Home() {
     setHistory(h => h.filter(i => i.video_id !== item.video_id));
     
     try {
-      await axios.delete(`http://localhost:8000/api/looped-songs/${item.video_id}`);
+      await axios.delete(`${API_URL}/api/looped-songs/${item.video_id}`);
       // add to pending undo map
       const expires = Date.now() + UNDO_MS;
       const timer = window.setTimeout(() => {
@@ -156,7 +157,7 @@ export default function Home() {
       try {
         setHistoryLoading(true);
         setHistoryError('');
-        const base = 'http://localhost:8000/api/looped-songs';
+        const base = `${API_URL}/api/looped-songs`;
         const url =
           sortBy === 'recent'
             ? `${base}?sort=recent`
@@ -190,7 +191,7 @@ export default function Home() {
   /**
    * Event handler for when the YouTube player is ready. Records the start time, sets looping state, and starts playing the video.
    */
-  const onPlayerReady = (event: any) => {
+  const onPlayerReady = (event: { target: { playVideo: () => void; seekTo: (t: number, allowSeekAhead?: boolean) => void } }) => {
     // Keep a reference to control the player imperatively
     playerRef.current = event.target;
     setLoopStartTime(Date.now());
@@ -203,7 +204,7 @@ export default function Home() {
   };
 
   // Fixing the issue where the elapsed time does not reflect when the video is paused
-  const onPlayerStateChange = (event: any) => {
+  const onPlayerStateChange = (event: { data: number }) => {
     if (event.data === 2) { // 2 = paused
       if (loopStartTime) {
         setTimePassed(prev => prev + (Date.now() - loopStartTime));
@@ -221,7 +222,7 @@ export default function Home() {
    * seeks back to start and continues playing. Otherwise stops looping.
    * Calculates elapsed time since loop started to determine whether to continue.
    */
-  const onPlayerEnd = (event: any) => {
+  const onPlayerEnd = (event: { target: { seekTo: (t: number) => void; playVideo: () => void } }) => {
     if (loopStartTime == null) return;
 
     // Duration of the session that just finished
@@ -274,7 +275,7 @@ export default function Home() {
     // save the looped song to the database
     try {
       setIsSaving(true);
-      const resp = await axios.post('http://localhost:8000/api/saveloopedsong', {
+      const resp = await axios.post(`${API_URL}/api/saveloopedsong`, {
         video_id: idFromUrl,
         title: videoTitle || '',
         loop_duration: Number(loopMinutes),
@@ -366,7 +367,7 @@ export default function Home() {
 
     // Increment play_count for this history item and refresh the panel
     try {
-      await axios.post('http://localhost:8000/api/saveloopedsong', {
+      await axios.post(`${API_URL}/api/saveloopedsong`, {
         video_id: item.video_id,
         title: item.title,
         loop_duration: item.loop_duration,
@@ -380,12 +381,12 @@ export default function Home() {
   // Toggle favorite for a history item and refresh list
   const toggleFavorite = async (item: LoopedSong) => {
     try {
-      const base = `http://localhost:8000/api/looped-songs/${item.video_id}/favorite`;
+      const base = `${API_URL}/api/looped-songs/${item.video_id}/favorite`;
       // Send explicit state for idempotency
       await axios.patch(base, { is_favorite: !item.is_favorite });
       showToast(item.is_favorite ? 'Removed from favorites' : 'Added to favorites', 'success');
       // Refetch with current sort to reflect authoritative value
-      const listBase = 'http://localhost:8000/api/looped-songs';
+      const listBase = `${API_URL}/api/looped-songs`;
       const url =
         sortBy === 'recent'
           ? `${listBase}?sort=recent`
