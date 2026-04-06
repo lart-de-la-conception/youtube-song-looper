@@ -30,8 +30,9 @@ type LoopedSong = {
 };
 
 export default function Home() {
-  const apiUrl = getApiUrl();
+  const API_URL = getApiUrl();
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [urlInputText, setUrlInputText] = useState('');
   const [loopMinutes, setLoopMinutes] = useState('');
   const [submittedLoopMinutes, setSubmittedLoopMinutes] = useState('');
   const [videoId, setVideoId] = useState<string | null>(null);
@@ -78,7 +79,7 @@ export default function Home() {
     entries.forEach((e) => clearTimeout(e.timer));
     try {
       await Promise.all(
-        entries.map((e) => axios.patch(`${apiUrl}/api/looped-songs/${e.item.video_id}/restore`))
+        entries.map((e) => axios.patch(`${API_URL}/api/looped-songs/${e.item.video_id}/restore`))
       );
       setPendingUndos({});
       await refreshHistoryWithCurrentSort();
@@ -99,16 +100,15 @@ export default function Home() {
   // Ref to the underlying YouTube player instance
   const playerRef = useRef<{ seekTo: (t: number, allowSeekAhead?: boolean) => void; playVideo: () => void } | null>(null);
 
-  const getHistoryUrl = () => {
-    const base = `${apiUrl}/api/looped-songs`;
-    if (sortBy === 'recent') return `${base}?sort=recent`;
-    if (sortBy === 'plays') return `${base}?sort=plays`;
-    return base;
-  };
+  const loopDurationMs = Number(loopMinutes) > 0 ? Number(loopMinutes) * 60 * 1000 : 0; // Convert minutes to milliseconds for easier comparison
 
   // Refresh history with current sort
   const refreshHistoryWithCurrentSort = async () => {
-    const res = await fetch(getHistoryUrl(), { credentials: 'include' });
+    const base = `${API_URL}/api/looped-songs`;
+    const url = sortBy === 'recent' ? `${base}?sort=recent`
+      : sortBy === 'plays' ? `${base}?sort=plays`
+      : base;
+    const res = await fetch(url, { credentials: 'include' });
     if (res.ok) setHistory(await res.json());
   };
 
@@ -118,7 +118,7 @@ export default function Home() {
     setHistory(h => h.filter(i => i.video_id !== item.video_id));
     
     try {
-      await axios.delete(`${apiUrl}/api/looped-songs/${item.video_id}`);
+      await axios.delete(`${API_URL}/api/looped-songs/${item.video_id}`);
       // add to pending undo map
       const expires = Date.now() + UNDO_MS;
       const timer = window.setTimeout(() => {
@@ -166,7 +166,14 @@ export default function Home() {
       try {
         setHistoryLoading(true);
         setHistoryError('');
-        const res = await fetch(getHistoryUrl(), { credentials: 'include' });
+        const base = `${API_URL}/api/looped-songs`;
+        const url =
+          sortBy === 'recent'
+            ? `${base}?sort=recent`
+            : sortBy === 'plays'
+            ? `${base}?sort=plays`
+            : base; // 'added' falls back to default ordering
+        const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) throw new Error('Failed to fetch history');
         const data: LoopedSong[] = await res.json();
         setHistory(data);
@@ -277,11 +284,12 @@ export default function Home() {
     // save the looped song to the database
     try {
       setIsSaving(true);
-      await axios.post(`${apiUrl}/api/saveloopedsong`, {
+      const resp = await axios.post(`${API_URL}/api/saveloopedsong`, {
         video_id: idFromUrl,
         title: videoTitle || '',
         loop_duration: Number(loopMinutes),
       });
+      console.log(resp.data);
       showToast('Saved to history', 'success');
       // Refresh history to reflect updated play_count / ordering
       void refreshHistoryWithCurrentSort();
@@ -327,6 +335,9 @@ export default function Home() {
   const fetchVideoTitle = async (videoId: string) => {
     try {
       const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+      if (!response.ok) {
+        return '';
+      }
       const data = await response.json();
       return data.title || '';
     } catch (error) {
@@ -373,7 +384,7 @@ export default function Home() {
 
     // Increment play_count for this history item and refresh the panel
     try {
-      await axios.post(`${apiUrl}/api/saveloopedsong`, {
+      await axios.post(`${API_URL}/api/saveloopedsong`, {
         video_id: item.video_id,
         title: item.title,
         loop_duration: item.loop_duration,
@@ -387,7 +398,7 @@ export default function Home() {
   // Toggle favorite for a history item and refresh list
   const toggleFavorite = async (item: LoopedSong) => {
     try {
-      const base = `${apiUrl}/api/looped-songs/${item.video_id}/favorite`;
+      const base = `${API_URL}/api/looped-songs/${item.video_id}/favorite`;
       // Send explicit state for idempotency
       await axios.patch(base, { is_favorite: !item.is_favorite });
       showToast(item.is_favorite ? 'Removed from favorites' : 'Added to favorites', 'success');
@@ -470,7 +481,7 @@ export default function Home() {
         }`}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-4">
-          <h2 id="history-drawer-title" className="font-franklin-pro-bold text-lg tracking-wide text-gray-900 uppercase">
+          <h2 id="history-drawer-title" className="text-lg font-semibold tracking-tight text-black text-gray-900 uppercase">
             History
           </h2>
           <button
@@ -566,17 +577,19 @@ export default function Home() {
           <MdHistory size={18} className="shrink-0 text-gray-600" aria-hidden />
           History
         </button>
-        <h1 className="mb-1 text-center font-franklin-pro-bold text-xl tracking-wide text-gray-900 uppercase md:text-3xl">
+        <h1
+          className="text-xl md:text-3xl text-black mb-1 tracking-wide text-center font-franklin-pro-bold text-gray-900 uppercase"
+        >
           YouTube Song Looper
         </h1>
-        <p className="text-center text-sm text-gray-500">
+        <p className="text-gray-500 text-center text-sm font-light">
           When one listen isn't enough ...
         </p>
       </header>
       <section className="flex flex-col items-center justify-start px-4 pt-8">
         <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-md text-black">
           <div>
-            <label htmlFor="youtube-url" className="mb-1 block font-franklin-pro-bold text-sm tracking-wide text-gray-900 uppercase">
+            <label htmlFor="youtube-url" className="block text-sm mb-1 tracking-wide font-sans font-bold text-gray-900 uppercase">
               YouTube Video URL
             </label>
             <input
@@ -586,16 +599,16 @@ export default function Home() {
               value={youtubeUrl}
               onChange={handleUrlChange}
               placeholder="https://www.youtube.com/watch?v=..."
-              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-black placeholder-gray-400 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full border border-gray-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-400 text-sm font-light shadow-sm transition"
             />
           </div>
           {videoTitle && (
-            <div className="mt-1 text-sm text-gray-600">
+            <div className="mt-1 text-sm text-gray-600 font-light">
               {videoTitle}
             </div>
           )}
           <div>
-            <label htmlFor="loop-minutes" className="mb-1 block font-franklin-pro-bold text-sm tracking-wide text-gray-900 uppercase">
+            <label htmlFor="loop-minutes" className="block text-sm mb-1 text-gray-700 tracking-wide font-sans font-bold text-gray-900 uppercase">
               Loop Duration (minutes)
             </label>
             <input
@@ -608,17 +621,17 @@ export default function Home() {
                 setLoopMinutes(e.target.value);
                 if (error && e.target.value && Number(e.target.value) > 0) setError('');
               }}
-              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-black placeholder-gray-400 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full border border-gray-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-400 text-sm font-light shadow-sm transition"
             />
           </div>
           {error && (
-            <div className="mt-1 text-sm text-red-500">{error}</div>
+            <div className="text-red-500 text-sm font-light mt-1">{error}</div>
           )}
           <button
             type="submit"
             disabled={isSaving}
             aria-busy={isSaving}
-            className="shake-btn w-full rounded-md bg-blue-600 py-2 text-base text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full bg-blue-600 text-white font-light py-2 rounded-md hover:bg-blue-700 transition text-base tracking-wide shadow-sm disabled:opacity-60 disabled:cursor-not-allowed shake-btn"
           >
             <span className="inline-flex items-center justify-center gap-2 font-franklin-pro-bold uppercase text-sm">
               {isSaving && (
@@ -631,7 +644,7 @@ export default function Home() {
         {videoId && (
           <div className="mt-12 flex flex-col items-center justify-center w-full">
             {isLooping && (
-              <div className="mb-2 text-center text-sm text-blue-600">
+              <div className="mb-2 text-blue-600 text-center text-s font-light">
                 Looping for {formatTime(elapsedTime)} / {submittedLoopMinutes ? `${submittedLoopMinutes}:00` : ''}
               </div>
             )}

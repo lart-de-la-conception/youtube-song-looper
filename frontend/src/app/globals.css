@@ -19,18 +19,14 @@
   }
 }
 
-html,
+html, body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: "Helvetica Neue", "Helvetica Neue Light", Helvetica, Arial, sans-serif;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
 }
 
 /* Hide WebKit datalist dropdown arrow and clear button for a cleaner input */
