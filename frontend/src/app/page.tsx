@@ -371,6 +371,7 @@ export default function Home() {
       return;
     }
 
+    setIsHistoryOpen(false);
     setVideoId(item.video_id);
     setYoutubeUrl(`https://www.youtube.com/watch?v=${item.video_id}`);
     setVideoTitle(item.title);
@@ -412,13 +413,13 @@ export default function Home() {
   const renderHistoryItem = (item: LoopedSong) => {
     const thumb = `https://img.youtube.com/vi/${item.video_id}/hqdefault.jpg`;
     return (
-      <div key={item.id} className="w-full flex items-center gap-2">
+      <div key={item.id} className="flex w-full min-w-0 items-center gap-1.5 sm:gap-2">
         <button
           onClick={() => loadFromHistory(item)}
-          className="flex-1 text-left flex items-center gap-3 p-2 rounded hover:bg-gray-100 transition"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded p-1.5 text-left transition hover:bg-gray-100 sm:gap-3 sm:p-2"
         >
-          <img src={thumb} alt={item.title} className="w-16 h-10 object-cover rounded" />
-          <div className="flex-1">
+          <img src={thumb} alt={item.title} className="h-9 w-14 shrink-0 rounded object-cover sm:h-10 sm:w-16" />
+          <div className="min-w-0 flex-1">
             <div className="text-sm text-black line-clamp-2">{item.title}</div>
             <div className="text-xs text-gray-500">{item.loop_duration} min</div>
             <div className="text-xs text-gray-500">{item.play_count} plays</div>
@@ -427,20 +428,20 @@ export default function Home() {
         <button
           aria-label="Toggle favorite"
           onClick={(e) => { e.stopPropagation(); toggleFavorite(item); }}
-          className="p-2 rounded hover:bg-gray-100 transition"
+          className="shrink-0 rounded p-1.5 transition hover:bg-gray-100 sm:p-2"
         >
           {item.is_favorite ? (
-            <MdStar className="text-yellow-500" size={18} />
+            <MdStar className="text-yellow-500" size={16} />
           ) : (
-            <MdStarBorder className="text-gray-400" size={18} />
+            <MdStarBorder className="text-gray-400" size={16} />
           )}
         </button>
         <button
           aria-label="Delete"
           onClick={(e) => { e.stopPropagation(); deleteHistoryItem(item); }}
-          className="p-2 rounded hover:bg-gray-100 transition"
+          className="shrink-0 rounded p-1.5 transition hover:bg-gray-100 sm:p-2"
         >
-          <MdDelete className="text-gray-400" size={18} />
+          <MdDelete className="text-gray-400" size={16} />
         </button>
       </div>
     );
@@ -476,11 +477,11 @@ export default function Home() {
         aria-modal="true"
         aria-labelledby="history-drawer-title"
         aria-hidden={!isHistoryOpen}
-        className={`fixed inset-y-0 right-0 z-50 flex h-dvh max-h-dvh w-full max-w-sm flex-col border-l border-gray-200 bg-white shadow-xl transition-transform duration-300 ease-out ${
+        className={`fixed inset-y-0 right-0 z-50 flex h-dvh max-h-dvh w-full max-w-full flex-col overflow-x-hidden border-gray-200 bg-white shadow-xl transition-transform duration-300 ease-out sm:w-[26rem] sm:max-w-[26rem] sm:border-l md:w-[28rem] md:max-w-[28rem] lg:w-[24rem] lg:max-w-[24rem] xl:w-[26rem] xl:max-w-[26rem] ${
           isHistoryOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
         }`}
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-4">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-4 sm:px-5">
           <h2 id="history-drawer-title" className="text-lg font-semibold tracking-tight text-black text-gray-900 uppercase">
             History
           </h2>
@@ -488,13 +489,13 @@ export default function Home() {
             type="button"
             aria-label="Close history"
             onClick={() => setIsHistoryOpen(false)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-700 transition hover:bg-gray-100 hover:text-black"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-gray-700 transition hover:bg-gray-100 hover:text-black sm:h-10 sm:w-10"
           >
             <MdClose size={16} aria-hidden />
           </button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 sm:px-5">
           <div className="mb-2 shrink-0">
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -565,20 +566,20 @@ export default function Home() {
         </div>
       </aside>
 
-      <header className="relative w-full py-8 pr-6 pl-4 md:pr-8 flex flex-col justify-center items-center">
+      <header className="relative flex w-full flex-col items-center justify-center px-4 pb-8 pt-4 sm:px-6 sm:py-10 md:px-8">
         <button
           type="button"
           aria-label="Open history"
           aria-expanded={isHistoryOpen}
           aria-controls="history-drawer"
           onClick={() => setIsHistoryOpen(true)}
-          className="absolute right-6 top-12.5 z-30 flex -translate-y-1/2 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 md:right-15"
+          className="order-3 mt-4 flex items-center gap-2 self-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 sm:absolute sm:right-6 sm:top-12 sm:z-30 sm:order-none sm:mt-0 sm:-translate-y-1/2 md:right-8"
         >
           <MdHistory size={18} className="shrink-0 text-gray-600" aria-hidden />
           History
         </button>
         <h1
-          className="text-xl md:text-3xl text-black mb-1 tracking-wide text-center font-franklin-pro-bold text-gray-900 uppercase"
+          className="mb-1 text-center font-franklin-pro-bold text-2xl tracking-wide text-gray-900 uppercase sm:text-2xl md:text-3xl lg:text-3xl"
         >
           YouTube Song Looper
         </h1>
@@ -648,18 +649,22 @@ export default function Home() {
                 Looping for {formatTime(elapsedTime)} / {submittedLoopMinutes ? `${submittedLoopMinutes}:00` : ''}
               </div>
             )}
-            <div className="flex justify-center w-full">
+            <div className="flex w-full justify-center">
+              <div className="aspect-video w-full max-w-[640px] overflow-hidden rounded-lg">
               <YouTube
+                className="h-full w-full"
+                iframeClassName="h-full w-full"
                 videoId={videoId}
                 opts={{
-                  height: '360',
-                  width: '640',
+                  height: '100%',
+                  width: '100%',
                   playerVars: { autoplay: 1 },
                 }}
                 onReady={onPlayerReady}
                 onEnd={onPlayerEnd}
                 onStateChange={onPlayerStateChange}
               />
+              </div>
             </div>
           </div>
         )}
