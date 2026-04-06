@@ -19,13 +19,18 @@
   }
 }
 
-html, body {
-  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-}
-
+html,
 body {
   background: var(--background);
   color: var(--foreground);
+  font-family: "Helvetica Neue", "Helvetica Neue Light", Helvetica, Arial, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 /* Hide WebKit datalist dropdown arrow and clear button for a cleaner input */
@@ -46,4 +51,58 @@ input::-webkit-credentials-auto-fill-button {
 }
 .animate-toast-in {
   animation: toast-in .18s ease-out both;
+}
+
+.font-franklin-demi-condensed {
+  font-family: "ITC Franklin Gothic Std Demi Condensed", "Franklin Gothic Demi Cond", "Franklin Gothic Medium Cond", "Franklin Gothic Demi", "Franklin Gothic Medium", "Arial Narrow", Arial, sans-serif;
+  font-weight: 600;
+  font-stretch: condensed;
+}
+.font-franklin-heavy-condensed {
+  font-family: "ITC Franklin Gothic Std Heavy Condensed", "Franklin Gothic Heavy Cond", "Franklin Gothic Demi Cond", "Franklin Gothic", Impact, "Arial Narrow", Arial, sans-serif;
+  font-weight: 800;
+  font-stretch: condensed;
+}
+.font-franklin-extra-compressed-bold {
+  font-family: "ITC Franklin Gothic Extra Compressed Bold", "ITC Franklin Gothic Std Heavy Condensed", "Franklin Gothic Heavy Cond", "Franklin Gothic Demi Cond", Impact, "Arial Narrow", Arial, sans-serif;
+  font-weight: 700;
+  font-stretch: extra-condensed;
+}
+.font-franklin-pro-bold {
+  font-family: "ITC Franklin Pro Bold", "ITC Franklin(TM) Pro Bold", "Franklin Gothic Demi", "Franklin Gothic Medium", Arial, sans-serif;
+  font-weight: 700;
+}
+
+.shake-btn {
+  cursor: pointer;
+}
+.shake-btn:hover,
+.shake-btn:focus-visible {
+  animation: shake-btn 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite both;
+}
+@keyframes shake-btn {
+  0% {
+    transform: translate(0);
+  }
+  20% {
+    transform: translate(-1px, 1px);
+  }
+  40% {
+    transform: translate(-1px, -1px);
+  }
+  60% {
+    transform: translate(1px, 1px);
+  }
+  80% {
+    transform: translate(1px, -1px);
+  }
+  100% {
+    transform: translate(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shake-btn:hover,
+  .shake-btn:focus-visible {
+    animation: none;
+  }
 }

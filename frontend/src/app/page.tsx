@@ -1,13 +1,21 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import YouTube from 'react-youtube';  
-import { MdHistory, MdStar, MdStarBorder, MdDelete } from 'react-icons/md';
+import { MdHistory, MdClose, MdStar, MdStarBorder, MdDelete } from 'react-icons/md';
 import axios from 'axios';
 axios.defaults.withCredentials = true;
 import Toast, { ToastItem } from '@/components/Toast';
 
-// Backend API base URL (env-driven; falls back to localhost for dev/tests)
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+function getApiUrl() {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8000';
+    }
+  }
+
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+}
 
 
 type LoopedSong = {
@@ -22,8 +30,8 @@ type LoopedSong = {
 };
 
 export default function Home() {
+  const apiUrl = getApiUrl();
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [urlInputText, setUrlInputText] = useState('');
   const [loopMinutes, setLoopMinutes] = useState('');
   const [submittedLoopMinutes, setSubmittedLoopMinutes] = useState('');
   const [videoId, setVideoId] = useState<string | null>(null);
@@ -70,7 +78,7 @@ export default function Home() {
     entries.forEach((e) => clearTimeout(e.timer));
     try {
       await Promise.all(
-        entries.map((e) => axios.patch(`${API_URL}/api/looped-songs/${e.item.video_id}/restore`))
+        entries.map((e) => axios.patch(`${apiUrl}/api/looped-songs/${e.item.video_id}/restore`))
       );
       setPendingUndos({});
       await refreshHistoryWithCurrentSort();
@@ -91,15 +99,16 @@ export default function Home() {
   // Ref to the underlying YouTube player instance
   const playerRef = useRef<{ seekTo: (t: number, allowSeekAhead?: boolean) => void; playVideo: () => void } | null>(null);
 
-  const loopDurationMs = Number(loopMinutes) > 0 ? Number(loopMinutes) * 60 * 1000 : 0; // Convert minutes to milliseconds for easier comparison
+  const getHistoryUrl = () => {
+    const base = `${apiUrl}/api/looped-songs`;
+    if (sortBy === 'recent') return `${base}?sort=recent`;
+    if (sortBy === 'plays') return `${base}?sort=plays`;
+    return base;
+  };
 
   // Refresh history with current sort
   const refreshHistoryWithCurrentSort = async () => {
-    const base = `${API_URL}/api/looped-songs`;
-    const url = sortBy === 'recent' ? `${base}?sort=recent`
-      : sortBy === 'plays' ? `${base}?sort=plays`
-      : base;
-    const res = await fetch(url, { credentials: 'include' });
+    const res = await fetch(getHistoryUrl(), { credentials: 'include' });
     if (res.ok) setHistory(await res.json());
   };
 
@@ -109,7 +118,7 @@ export default function Home() {
     setHistory(h => h.filter(i => i.video_id !== item.video_id));
     
     try {
-      await axios.delete(`${API_URL}/api/looped-songs/${item.video_id}`);
+      await axios.delete(`${apiUrl}/api/looped-songs/${item.video_id}`);
       // add to pending undo map
       const expires = Date.now() + UNDO_MS;
       const timer = window.setTimeout(() => {
@@ -157,14 +166,7 @@ export default function Home() {
       try {
         setHistoryLoading(true);
         setHistoryError('');
-        const base = `${API_URL}/api/looped-songs`;
-        const url =
-          sortBy === 'recent'
-            ? `${base}?sort=recent`
-            : sortBy === 'plays'
-            ? `${base}?sort=plays`
-            : base; // 'added' falls back to default ordering
-        const res = await fetch(url, { credentials: 'include' });
+        const res = await fetch(getHistoryUrl(), { credentials: 'include' });
         if (!res.ok) throw new Error('Failed to fetch history');
         const data: LoopedSong[] = await res.json();
         setHistory(data);
@@ -275,12 +277,11 @@ export default function Home() {
     // save the looped song to the database
     try {
       setIsSaving(true);
-      const resp = await axios.post(`${API_URL}/api/saveloopedsong`, {
+      await axios.post(`${apiUrl}/api/saveloopedsong`, {
         video_id: idFromUrl,
         title: videoTitle || '',
         loop_duration: Number(loopMinutes),
       });
-      console.log(resp.data);
       showToast('Saved to history', 'success');
       // Refresh history to reflect updated play_count / ordering
       void refreshHistoryWithCurrentSort();
@@ -354,6 +355,11 @@ export default function Home() {
    * Load a history item: set video, title, and loop duration, then open player
    */
   const loadFromHistory = async (item: LoopedSong) => {
+    if (videoId === item.video_id && isLooping && !videoPaused) {
+      showToast('Video is currently playing', 'success');
+      return;
+    }
+
     setVideoId(item.video_id);
     setYoutubeUrl(`https://www.youtube.com/watch?v=${item.video_id}`);
     setVideoTitle(item.title);
@@ -367,7 +373,7 @@ export default function Home() {
 
     // Increment play_count for this history item and refresh the panel
     try {
-      await axios.post(`${API_URL}/api/saveloopedsong`, {
+      await axios.post(`${apiUrl}/api/saveloopedsong`, {
         video_id: item.video_id,
         title: item.title,
         loop_duration: item.loop_duration,
@@ -381,23 +387,11 @@ export default function Home() {
   // Toggle favorite for a history item and refresh list
   const toggleFavorite = async (item: LoopedSong) => {
     try {
-      const base = `${API_URL}/api/looped-songs/${item.video_id}/favorite`;
+      const base = `${apiUrl}/api/looped-songs/${item.video_id}/favorite`;
       // Send explicit state for idempotency
       await axios.patch(base, { is_favorite: !item.is_favorite });
       showToast(item.is_favorite ? 'Removed from favorites' : 'Added to favorites', 'success');
-      // Refetch with current sort to reflect authoritative value
-      const listBase = `${API_URL}/api/looped-songs`;
-      const url =
-        sortBy === 'recent'
-          ? `${listBase}?sort=recent`
-          : sortBy === 'plays'
-          ? `${listBase}?sort=plays`
-          : listBase;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data: LoopedSong[] = await res.json();
-        setHistory(data);
-      }
+      await refreshHistoryWithCurrentSort();
     } catch (err) {
       console.error('Failed to toggle favorite:', err);
       showToast('Could not update favorite', 'error');
@@ -450,107 +444,139 @@ export default function Home() {
         position="bottom-right"
       />
 
-      {/* History toggle */}
+      {/* Backdrop: blocks interaction with main content; drawer hidden off-screen when closed */}
       <button
-        aria-label="Toggle history"
-        onClick={() => setIsHistoryOpen(v => !v)}
-        className="fixed right-4 top-4 z-40 rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-black shadow-sm hover:bg-gray-50"
-      >
-        <span className="inline-flex items-center gap-2">
-          <span className="h-4 w-4">
-            <MdHistory size={16} aria-hidden/>
-          </span>
-          {isHistoryOpen ? 'Close History' : 'History'}
-        </span>
-      </button>
+        type="button"
+        aria-label="Close history"
+        aria-hidden={!isHistoryOpen}
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 md:bg-black/30 ${
+          isHistoryOpen
+            ? 'pointer-events-auto opacity-100'
+            : 'pointer-events-none opacity-0'
+        }`}
+        onClick={() => setIsHistoryOpen(false)}
+        tabIndex={isHistoryOpen ? 0 : -1}
+      />
 
-      {/* Slide-in History Panel */}
+      {/* Slide-in History Panel — full viewport height, scroll only the list */}
       <aside
-        className={`fixed top-0 right-0 z-30 h-full w-80 transform border-l border-gray-200 bg-white p-4 shadow-lg transition-transform duration-300 ${
-          isHistoryOpen ? 'translate-x-0' : 'translate-x-full'
+        id="history-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-drawer-title"
+        aria-hidden={!isHistoryOpen}
+        className={`fixed inset-y-0 right-0 z-50 flex h-dvh max-h-dvh w-full max-w-sm flex-col border-l border-gray-200 bg-white shadow-xl transition-transform duration-300 ease-out ${
+          isHistoryOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
         }`}
       >
-        <div className="mb-3">
-          <h2 className="text-base font-light text-black">Loop History</h2>
-          <div className="mt-8 flex items-center gap-2">
-            <button
-              type="button"
-              aria-pressed={sortBy === 'recent'}
-              onClick={() => setSortBy('recent')}
-              className={`px-3 py-1 text-xs rounded border transition ${
-                sortBy === 'recent'
-                  ? 'bg-black text-white border-black'
-                  : 'bg-white text-black border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              Most recent
-            </button>
-            <button
-              type="button"
-              aria-pressed={sortBy === 'plays'}
-              onClick={() => setSortBy('plays')}
-              className={`px-3 py-1 text-xs rounded border transition ${
-                sortBy === 'plays'
-                  ? 'bg-black text-white border-black'
-                  : 'bg-white text-black border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              Play count
-            </button>
-            <button
-              type="button"
-              aria-pressed={sortBy === 'added'}
-              onClick={() => setSortBy('added')}
-              className={`px-3 py-1 text-xs rounded border transition ${
-                sortBy === 'added'
-                  ? 'bg-black text-white border-black'
-                  : 'bg-white text-black border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              Recently added
-            </button>
-          </div>
+        <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-4">
+          <h2 id="history-drawer-title" className="font-franklin-pro-bold text-lg tracking-wide text-gray-900 uppercase">
+            History
+          </h2>
+          <button
+            type="button"
+            aria-label="Close history"
+            onClick={() => setIsHistoryOpen(false)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-gray-700 transition hover:bg-gray-100 hover:text-black"
+          >
+            <MdClose size={16} aria-hidden />
+          </button>
+        </div>
 
-          {/* Undo deleted items banner (batch) */}
-          {Object.keys(pendingUndos).length > 0 && (
-            <div className="mt-3 flex items-center justify-between rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-800">
-              <span>
-                Removed {Object.keys(pendingUndos).length} item{Object.keys(pendingUndos).length > 1 ? 's' : ''}. Press Undo if it was a mistake.
-              </span>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1">
+          <div className="mb-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={undoAllDeletes}
-                className="ml-3 rounded bg-black px-2 py-1 text-xs text-white hover:bg-black/80"
+                type="button"
+                aria-pressed={sortBy === 'recent'}
+                onClick={() => setSortBy('recent')}
+                className={`px-4 py-2.5 text-xs rounded border transition ${
+                  sortBy === 'recent'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-black border-gray-200 hover:bg-gray-50'
+                }`}
               >
-                Undo
+                Most recent
+              </button>
+              <button
+                type="button"
+                aria-pressed={sortBy === 'plays'}
+                onClick={() => setSortBy('plays')}
+                className={`px-4 py-2.5 text-xs rounded border transition ${
+                  sortBy === 'plays'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-black border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Play count
+              </button>
+              <button
+                type="button"
+                aria-pressed={sortBy === 'added'}
+                onClick={() => setSortBy('added')}
+                className={`px-4 py-2.5 text-xs rounded border transition ${
+                  sortBy === 'added'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-black border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Recently added
               </button>
             </div>
-          )}
-        </div>
-        {historyLoading && <div className="text-sm text-gray-500">Loading…</div>}
-        {historyError && <div className="text-sm text-red-500">{historyError}</div>}
-        <div className="max-h-[80vh] overflow-y-auto pr-1 space-y-1">
-          {history.length === 0 && !historyLoading ? (
-            <div className="text-sm text-gray-500">No history yet</div>
-          ) : (
-            history.map(renderHistoryItem)
-          )}
+
+            {/* Undo deleted items banner (batch) */}
+            {Object.keys(pendingUndos).length > 0 && (
+              <div className="mt-3 flex items-center justify-between rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-800">
+                <span>
+                  Removed {Object.keys(pendingUndos).length} item{Object.keys(pendingUndos).length > 1 ? 's' : ''}. Press Undo if it was a mistake.
+                </span>
+                <button
+                  type="button"
+                  onClick={undoAllDeletes}
+                  className="ml-3 rounded bg-black px-2 py-1 text-xs text-white hover:bg-black/80"
+                >
+                  Undo
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {historyLoading && <div className="mb-2 text-sm text-gray-500">Loading…</div>}
+            {historyError && <div className="mb-2 text-sm text-red-500">{historyError}</div>}
+            {history.length === 0 && !historyLoading ? (
+              <div className="text-sm text-gray-500">No history yet</div>
+            ) : (
+              <div className="space-y-1">
+                {history.map(renderHistoryItem)}
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
-      <header className="w-full py-8 flex flex-col justify-center items-center">
-        <h1
-          className="text-2xl md:text-4xl font-light text-black mb-1 tracking-wide text-center"
+      <header className="relative w-full py-8 pr-6 pl-4 md:pr-8 flex flex-col justify-center items-center">
+        <button
+          type="button"
+          aria-label="Open history"
+          aria-expanded={isHistoryOpen}
+          aria-controls="history-drawer"
+          onClick={() => setIsHistoryOpen(true)}
+          className="absolute right-6 top-12.5 z-30 flex -translate-y-1/2 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm transition hover:border-gray-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 md:right-15"
         >
+          <MdHistory size={18} className="shrink-0 text-gray-600" aria-hidden />
+          History
+        </button>
+        <h1 className="mb-1 text-center font-franklin-pro-bold text-xl tracking-wide text-gray-900 uppercase md:text-3xl">
           YouTube Song Looper
         </h1>
-        <p className="text-gray-500 text-center text-base font-light">
+        <p className="text-center text-sm text-gray-500">
           When one listen isn't enough ...
         </p>
       </header>
       <section className="flex flex-col items-center justify-start px-4 pt-8">
         <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-md text-black">
           <div>
-            <label htmlFor="youtube-url" className="block text-sm font-normal mb-1 text-gray-700 tracking-wide">
+            <label htmlFor="youtube-url" className="mb-1 block font-franklin-pro-bold text-sm tracking-wide text-gray-900 uppercase">
               YouTube Video URL
             </label>
             <input
@@ -560,16 +586,16 @@ export default function Home() {
               value={youtubeUrl}
               onChange={handleUrlChange}
               placeholder="https://www.youtube.com/watch?v=..."
-              className="w-full border border-gray-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-400 text-sm font-light shadow-sm transition"
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-black placeholder-gray-400 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
           {videoTitle && (
-            <div className="mt-1 text-sm text-gray-600 font-light">
+            <div className="mt-1 text-sm text-gray-600">
               {videoTitle}
             </div>
           )}
           <div>
-            <label htmlFor="loop-minutes" className="block text-sm font-normal mb-1 text-gray-700 tracking-wide">
+            <label htmlFor="loop-minutes" className="mb-1 block font-franklin-pro-bold text-sm tracking-wide text-gray-900 uppercase">
               Loop Duration (minutes)
             </label>
             <input
@@ -582,19 +608,19 @@ export default function Home() {
                 setLoopMinutes(e.target.value);
                 if (error && e.target.value && Number(e.target.value) > 0) setError('');
               }}
-              className="w-full border border-gray-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-400 text-sm font-light shadow-sm transition"
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-black placeholder-gray-400 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
           {error && (
-            <div className="text-red-500 text-sm font-light mt-1">{error}</div>
+            <div className="mt-1 text-sm text-red-500">{error}</div>
           )}
           <button
             type="submit"
             disabled={isSaving}
             aria-busy={isSaving}
-            className="w-full bg-blue-600 text-white font-light py-2 rounded-md hover:bg-blue-700 transition text-base tracking-wide shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            className="shake-btn w-full rounded-md bg-blue-600 py-2 text-base text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <span className="inline-flex items-center justify-center gap-2">
+            <span className="inline-flex items-center justify-center gap-2 font-franklin-pro-bold uppercase text-sm">
               {isSaving && (
                 <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
               )}
@@ -605,7 +631,7 @@ export default function Home() {
         {videoId && (
           <div className="mt-12 flex flex-col items-center justify-center w-full">
             {isLooping && (
-              <div className="mb-2 text-blue-600 text-center text-s font-light">
+              <div className="mb-2 text-center text-sm text-blue-600">
                 Looping for {formatTime(elapsedTime)} / {submittedLoopMinutes ? `${submittedLoopMinutes}:00` : ''}
               </div>
             )}

@@ -22,7 +22,7 @@ const positionClass: Record<NonNullable<ToastProps['position']>, string> = {
 
 export default function Toast({ toasts, onClose, position = 'bottom-right' }: ToastProps) {
   return (
-    <div className={`pointer-events-none fixed z-50 flex flex-col gap-3 ${positionClass[position]}`}>
+    <div className={`pointer-events-none fixed z-[60] flex flex-col gap-3 ${positionClass[position]}`}>
       {toasts.map((t) => (
         <div
           key={t.id}

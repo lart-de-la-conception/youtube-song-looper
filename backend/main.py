@@ -21,6 +21,13 @@ from datetime import datetime, UTC
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+FRONTEND_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("FRONTEND_ORIGINS", "").split(",")
+    if origin.strip()
+]
+ALLOWED_ORIGINS = list(dict.fromkeys([FRONTEND_ORIGIN, *FRONTEND_ORIGINS]))
+LOCAL_DEV_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
 # Use SQLite-specific connect args only when using SQLite
 sqlite_connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
@@ -65,7 +72,8 @@ def get_user_id(request: Request, response: Response) -> str:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_ORIGIN],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=LOCAL_DEV_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
