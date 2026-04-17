@@ -21,6 +21,10 @@ describe('Home page', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('renders inputs and button', () => {
     render(<Home />);
     expect(screen.getByLabelText(/YouTube Video URL/i)).toBeInTheDocument();
@@ -209,6 +213,37 @@ describe('Home page', () => {
     // Restore Date.now
     Date.now = realNow;
     expect(seekTo2).not.toHaveBeenCalled();
+  });
+
+  it('shows a wakeup hint when history loading is unusually slow', async () => {
+    jest.useFakeTimers();
+
+    let resolveFetch!: (value: any) => void;
+    (global.fetch as jest.Mock).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }) as any
+    );
+
+    render(<Home />);
+    fireEvent.click(screen.getByRole('button', { name: /Open history/i }));
+
+    expect(screen.getByText(/Loading…/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Waking up the API/i)).not.toBeInTheDocument();
+
+    act(() => {
+      jest.advanceTimersByTime(2500);
+    });
+
+    expect(screen.getByText(/Waking up the API/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveFetch({ ok: true, json: async () => [] });
+    });
+
+    expect(await screen.findByText(/No history yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Waking up the API/i)).not.toBeInTheDocument();
   });
 });
 

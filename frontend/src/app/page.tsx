@@ -94,6 +94,7 @@ export default function Home() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [history, setHistory] = useState<LoopedSong[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [showHistoryWakeupHint, setShowHistoryWakeupHint] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [sortBy, setSortBy] = useState<'recent' | 'plays' | 'added'>('recent');
 
@@ -187,6 +188,19 @@ export default function Home() {
       fetchHistory();
     }
   }, [isHistoryOpen, sortBy]);
+
+  useEffect(() => {
+    if (!historyLoading) {
+      setShowHistoryWakeupHint(false);
+      return;
+    }
+
+    const wakeupTimer = window.setTimeout(() => {
+      setShowHistoryWakeupHint(true);
+    }, 2500);
+
+    return () => window.clearTimeout(wakeupTimer);
+  }, [historyLoading]);
 
   /**
    * Extracts the YouTube video ID from a given URL string. Returns the ID if found, otherwise null.
@@ -553,7 +567,16 @@ export default function Home() {
             )}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {historyLoading && <div className="mb-2 text-sm text-gray-500">Loading…</div>}
+            {historyLoading && (
+              <div className="mb-2 space-y-1">
+                <div className="text-sm text-gray-500">Loading…</div>
+                {showHistoryWakeupHint && (
+                  <div className="text-sm text-gray-500">
+                    Waking up the API... first load may take a few seconds.
+                  </div>
+                )}
+              </div>
+            )}
             {historyError && <div className="mb-2 text-sm text-red-500">{historyError}</div>}
             {history.length === 0 && !historyLoading ? (
               <div className="text-sm text-gray-500">No history yet</div>
