@@ -33,8 +33,12 @@ export default function Home() {
   const API_URL = getApiUrl();
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [urlInputText, setUrlInputText] = useState('');
+  const [loopMode, setLoopMode] = useState<'duration' | 'repeat'>('duration');
   const [loopMinutes, setLoopMinutes] = useState('');
   const [submittedLoopMinutes, setSubmittedLoopMinutes] = useState('');
+  const [repeatCount, setRepeatCount] = useState('');
+  const [submittedRepeatCount, setSubmittedRepeatCount] = useState('');
+  const [completedPlays, setCompletedPlays] = useState(0);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [loopStartTime, setLoopStartTime] = useState<number | null>(null);
   const [isLooping, setIsLooping] = useState(false);
@@ -101,7 +105,7 @@ export default function Home() {
   // Ref to the underlying YouTube player instance
   const playerRef = useRef<{ seekTo: (t: number, allowSeekAhead?: boolean) => void; playVideo: () => void } | null>(null);
 
-  const loopDurationMs = Number(loopMinutes) > 0 ? Number(loopMinutes) * 60 * 1000 : 0; // Convert minutes to milliseconds for easier comparison
+  const submittedRepeatCountNumber = Number(submittedRepeatCount);
 
   // Refresh history with current sort
   const refreshHistoryWithCurrentSort = async () => {
@@ -219,6 +223,7 @@ export default function Home() {
     playerRef.current = event.target;
     setLoopStartTime(Date.now());
     setTimePassed(0); // Reset accumulated time
+    setCompletedPlays(0);
     setIsLooping(true);
     setElapsedTime(0);
     event.target.playVideo();
@@ -251,6 +256,7 @@ export default function Home() {
     // Duration of the session that just finished
     const sessionMs = Date.now() - loopStartTime;
     const totalMs = timePassed + sessionMs;
+    const nextCompletedPlays = completedPlays + 1;
 
     // Prefer submitted duration; fall back to current input
     const targetMs =
@@ -259,12 +265,23 @@ export default function Home() {
         : Number(loopMinutes) > 0
         ? Number(loopMinutes) * 60 * 1000
         : 0;
+    const targetPlayCount =
+      submittedRepeatCountNumber > 0
+        ? submittedRepeatCountNumber
+        : Number(repeatCount) > 0
+        ? Number(repeatCount)
+        : 0;
+    const shouldContinueLoop =
+      targetPlayCount > 0
+        ? nextCompletedPlays < targetPlayCount
+        : targetMs > 0 && totalMs < targetMs;
 
     // Accumulate the finished session and clear current session start
     setTimePassed((prev) => prev + sessionMs);
     setLoopStartTime(null);
+    setCompletedPlays(nextCompletedPlays);
 
-    if (totalMs < targetMs) {
+    if (shouldContinueLoop) {
       // Continue looping without resetting the accumulated timer
       event.target.seekTo(0);
       event.target.playVideo();
@@ -278,15 +295,23 @@ export default function Home() {
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loopMinutes || Number(loopMinutes) <= 0) {
+    if (loopMode === 'duration' && (!loopMinutes || Number(loopMinutes) <= 0)) {
       setError('Please enter a valid loop duration (in minutes).');
       setTimeout(() => {
         setError('');
       }, 3000);
       return;
     }
+    if (loopMode === 'repeat' && (!repeatCount || !Number.isInteger(Number(repeatCount)) || Number(repeatCount) <= 0)) {
+      setError('Please enter a valid repeat count.');
+      setTimeout(() => {
+        setError('');
+      }, 3000);
+      return;
+    }
     setError('');
-    setSubmittedLoopMinutes(loopMinutes);
+    setSubmittedLoopMinutes(loopMode === 'duration' ? loopMinutes : '');
+    setSubmittedRepeatCount(loopMode === 'repeat' ? repeatCount : '');
 
     // Extract id from URL and validate
     const idFromUrl = extractVideoId(youtubeUrl);
@@ -295,23 +320,25 @@ export default function Home() {
       return;
     }
 
-    // save the looped song to the database
-    try {
-      setIsSaving(true);
-      const resp = await axios.post(`${API_URL}/api/saveloopedsong`, {
-        video_id: idFromUrl,
-        title: videoTitle || '',
-        loop_duration: Number(loopMinutes),
-      });
-      console.log(resp.data);
-      showToast('Saved to history', 'success');
-      // Refresh history to reflect updated play_count / ordering
-      void refreshHistoryWithCurrentSort();
-    } catch (err) {
-      console.error('Error saving looped song:', err);
-      showToast("Couldn't save. Try again.", 'error');
-    } finally {
-      setIsSaving(false);
+    // Duration-based sessions are saved in history. Repeat-only sessions stay local for now.
+    if (loopMode === 'duration') {
+      try {
+        setIsSaving(true);
+        const resp = await axios.post(`${API_URL}/api/saveloopedsong`, {
+          video_id: idFromUrl,
+          title: videoTitle || '',
+          loop_duration: Number(loopMinutes),
+        });
+        console.log(resp.data);
+        showToast('Saved to history', 'success');
+        // Refresh history to reflect updated play_count / ordering
+        void refreshHistoryWithCurrentSort();
+      } catch (err) {
+        console.error('Error saving looped song:', err);
+        showToast("Couldn't save. Try again.", 'error');
+      } finally {
+        setIsSaving(false);
+      }
     }
 
     // If the same video is already loaded, reset and play from start
@@ -320,6 +347,7 @@ export default function Home() {
       setIsLooping(true);
       setTimePassed(0);
       setElapsedTime(0);
+      setCompletedPlays(0);
       setLoopStartTime(Date.now());
       try {
         playerRef.current.seekTo(0, true);
@@ -390,11 +418,15 @@ export default function Home() {
     setYoutubeUrl(`https://www.youtube.com/watch?v=${item.video_id}`);
     setVideoTitle(item.title);
     const minutes = String(item.loop_duration ?? '');
+    setLoopMode('duration');
     setLoopMinutes(minutes);
     setSubmittedLoopMinutes(minutes);
+    setRepeatCount('');
+    setSubmittedRepeatCount('');
     setIsLooping(false);
     setTimePassed(0);
     setElapsedTime(0);
+    setCompletedPlays(0);
     // Player will autoplay in onPlayerReady
 
     // Increment play_count for this history item and refresh the panel
@@ -613,6 +645,43 @@ export default function Home() {
       <section className="flex flex-col items-center justify-start px-4 pt-8">
         <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-md text-black">
           <div>
+            <span className="block text-sm mb-1 text-gray-700 tracking-wide font-sans font-bold text-gray-900 uppercase">
+              Loop Type
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                aria-pressed={loopMode === 'duration'}
+                onClick={() => {
+                  setLoopMode('duration');
+                  setError('');
+                }}
+                className={`rounded border px-4 py-2.5 text-sm font-sans font-bold uppercase tracking-wide transition ${
+                  loopMode === 'duration'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-black border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Duration
+              </button>
+              <button
+                type="button"
+                aria-pressed={loopMode === 'repeat'}
+                onClick={() => {
+                  setLoopMode('repeat');
+                  setError('');
+                }}
+                className={`rounded border px-4 py-2.5 text-sm font-sans font-bold uppercase tracking-wide transition ${
+                  loopMode === 'repeat'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-black border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Repeat count
+              </button>
+            </div>
+          </div>
+          <div>
             <label htmlFor="youtube-url" className="block text-sm mb-1 tracking-wide font-sans font-bold text-gray-900 uppercase">
               YouTube Video URL
             </label>
@@ -631,23 +700,46 @@ export default function Home() {
               {videoTitle}
             </div>
           )}
-          <div>
-            <label htmlFor="loop-minutes" className="block text-sm mb-1 text-gray-700 tracking-wide font-sans font-bold text-gray-900 uppercase">
-              Loop Duration (minutes)
-            </label>
-            <input
-              id="loop-minutes"
-              type="number"
-              min={1}
-              max={120}
-              value={loopMinutes}
-              onChange={e => {
-                setLoopMinutes(e.target.value);
-                if (error && e.target.value && Number(e.target.value) > 0) setError('');
-              }}
-              className="w-full border border-gray-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-400 text-sm font-light shadow-sm transition"
-            />
-          </div>
+          {loopMode === 'duration' ? (
+            <div>
+              <label htmlFor="loop-minutes" className="block text-sm mb-1 text-gray-700 tracking-wide font-sans font-bold text-gray-900 uppercase">
+                Loop Duration (minutes)
+              </label>
+              <input
+                id="loop-minutes"
+                type="number"
+                min={1}
+                max={120}
+                value={loopMinutes}
+                onChange={e => {
+                  setLoopMinutes(e.target.value);
+                  if (error && e.target.value && Number(e.target.value) > 0) setError('');
+                }}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-400 text-sm font-light shadow-sm transition"
+              />
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="repeat-count" className="block text-sm mb-1 text-gray-700 tracking-wide font-sans font-bold text-gray-900 uppercase">
+                Repeat Count
+              </label>
+              <input
+                id="repeat-count"
+                type="number"
+                min={1}
+                step={1}
+                value={repeatCount}
+                onChange={e => {
+                  setRepeatCount(e.target.value);
+                  if (error && Number.isInteger(Number(e.target.value)) && Number(e.target.value) > 0) {
+                    setError('');
+                  }
+                }}
+                placeholder=""
+                className="w-full border border-gray-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-400 text-sm font-light shadow-sm transition"
+              />
+            </div>
+          )}
           {error && (
             <div className="text-red-500 text-sm font-light mt-1">{error}</div>
           )}
@@ -669,7 +761,9 @@ export default function Home() {
           <div className="mt-12 flex flex-col items-center justify-center w-full">
             {isLooping && (
               <div className="mb-2 text-blue-600 text-center text-s font-light">
-                Looping for {formatTime(elapsedTime)} / {submittedLoopMinutes ? `${submittedLoopMinutes}:00` : ''}
+                {submittedRepeatCountNumber > 0
+                  ? `Play ${Math.min(completedPlays + 1, submittedRepeatCountNumber)} / ${submittedRepeatCountNumber}`
+                  : `Looping for ${formatTime(elapsedTime)} / ${submittedLoopMinutes ? `${submittedLoopMinutes}:00` : ''}`}
               </div>
             )}
             <div className="flex w-full justify-center">

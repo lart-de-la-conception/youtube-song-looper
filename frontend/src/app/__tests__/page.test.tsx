@@ -19,6 +19,7 @@ global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => [] }) a
 describe('Home page', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => [] } as any);
   });
 
   afterEach(() => {
@@ -29,6 +30,7 @@ describe('Home page', () => {
     render(<Home />);
     expect(screen.getByLabelText(/YouTube Video URL/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Loop Duration/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Repeat count/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Load & Loop/i })).toBeInTheDocument();
   });
 
@@ -48,6 +50,18 @@ describe('Home page', () => {
     const form = screen.getByRole('button', { name: /Load & Loop/i }).closest('form') as HTMLFormElement;
     fireEvent.submit(form);
     expect(await screen.findByText(/Please enter a valid YouTube URL/i)).toBeInTheDocument();
+  });
+
+  it('shows validation error when repeat count is invalid', async () => {
+    render(<Home />);
+    fireEvent.click(screen.getByRole('button', { name: /Repeat count/i }));
+    fireEvent.change(screen.getByLabelText(/Repeat Count/i), { target: { value: '0' } });
+    fireEvent.change(screen.getByLabelText(/YouTube Video URL/i), {
+      target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' },
+    });
+    const form = screen.getByRole('button', { name: /Load & Loop/i }).closest('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    expect(await screen.findByText(/Please enter a valid repeat count/i)).toBeInTheDocument();
   });
 
   it('submits valid URL and duration, saves, and renders player', async () => {
@@ -73,8 +87,8 @@ describe('Home page', () => {
     render(<Home />);
 
     // Open history
-    fireEvent.click(screen.getByRole('button', { name: /toggle history/i }));
-    expect(await screen.findByText(/Loop History/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open history/i }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
 
     // Default sort fetch (?sort=recent)
     expect((global.fetch as jest.Mock).mock.calls.some(
@@ -106,7 +120,7 @@ describe('Home page', () => {
 
     render(<Home />);
     // Open history
-    fireEvent.click(screen.getByRole('button', { name: /toggle history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open history/i }));
 
     // Favorite toggle
     fireEvent.click(await screen.findByLabelText(/Toggle favorite/i));
@@ -163,7 +177,7 @@ describe('Home page', () => {
   it('shows empty state text when no history', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => [] } as any);
     render(<Home />);
-    fireEvent.click(screen.getByRole('button', { name: /Toggle history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Open history/i }));
     expect(await screen.findByText(/No history yet/i)).toBeInTheDocument();
   });
 
@@ -179,7 +193,7 @@ describe('Home page', () => {
     (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: true, json: async () => ([{
       id: 'row2', video_id: 'viderr12345x', title: 'Err Track', loop_duration: 3, play_count: 1, is_favorite: false,
     }]) } as any);
-    fireEvent.click(screen.getByRole('button', { name: /Toggle history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Open history/i }));
 
     mockedAxios.patch.mockRejectedValueOnce(new Error('favorite failed'));
     fireEvent.click(await screen.findByLabelText(/Toggle favorite/i));
@@ -244,6 +258,47 @@ describe('Home page', () => {
 
     expect(await screen.findByText(/No history yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/Waking up the API/i)).not.toBeInTheDocument();
+  });
+
+  it('stops looping after the selected repeat count', async () => {
+    render(<Home />);
+    fireEvent.click(screen.getByRole('button', { name: /Repeat count/i }));
+    fireEvent.change(screen.getByLabelText(/Repeat Count/i), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/YouTube Video URL/i), {
+      target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Load & Loop/i }));
+
+    expect(await screen.findByTestId('yt-player')).toBeInTheDocument();
+
+    const seekTo = jest.fn();
+    const playVideo = jest.fn();
+
+    await act(async () => {
+      (global as any).__ytProps.onReady({ target: { seekTo, playVideo } });
+    });
+
+    expect(screen.getByText(/Play 1 \/ 2/i)).toBeInTheDocument();
+
+    await act(async () => {
+      (global as any).__ytProps.onEnd({ target: { seekTo, playVideo } });
+    });
+
+    expect(seekTo).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      (global as any).__ytProps.onStateChange({ data: 1 });
+    });
+
+    expect(screen.getByText(/Play 2 \/ 2/i)).toBeInTheDocument();
+
+    await act(async () => {
+      (global as any).__ytProps.onEnd({ target: { seekTo, playVideo } });
+    });
+
+    expect(seekTo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Play 2 \/ 2/i)).not.toBeInTheDocument();
+    expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 });
 
