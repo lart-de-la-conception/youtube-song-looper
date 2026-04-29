@@ -32,7 +32,6 @@ type LoopedSong = {
 export default function Home() {
   const API_URL = getApiUrl();
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [urlInputText, setUrlInputText] = useState('');
   const [loopMode, setLoopMode] = useState<'duration' | 'repeat'>('duration');
   const [loopMinutes, setLoopMinutes] = useState('');
   const [submittedLoopMinutes, setSubmittedLoopMinutes] = useState('');
@@ -113,8 +112,12 @@ export default function Home() {
     const url = sortBy === 'recent' ? `${base}?sort=recent`
       : sortBy === 'plays' ? `${base}?sort=plays`
       : base;
-    const res = await fetch(url, { credentials: 'include' });
-    if (res.ok) setHistory(await res.json());
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      if (res.ok) setHistory(await res.json());
+    } catch (err) {
+      console.error('Failed to refresh history:', err);
+    }
   };
 
   // Delete a history item
@@ -320,25 +323,23 @@ export default function Home() {
       return;
     }
 
-    // Duration-based sessions are saved in history. Repeat-only sessions stay local for now.
-    if (loopMode === 'duration') {
-      try {
-        setIsSaving(true);
-        const resp = await axios.post(`${API_URL}/api/saveloopedsong`, {
-          video_id: idFromUrl,
-          title: videoTitle || '',
-          loop_duration: Number(loopMinutes),
-        });
-        console.log(resp.data);
-        showToast('Saved to history', 'success');
-        // Refresh history to reflect updated play_count / ordering
-        void refreshHistoryWithCurrentSort();
-      } catch (err) {
-        console.error('Error saving looped song:', err);
-        showToast("Couldn't save. Try again.", 'error');
-      } finally {
-        setIsSaving(false);
-      }
+    // Persist every submission so it shows up in history later.
+    // Repeat-mode sessions don't have a target duration, so we store 0.
+    try {
+      setIsSaving(true);
+      const resp = await axios.post(`${API_URL}/api/saveloopedsong`, {
+        video_id: idFromUrl,
+        title: videoTitle || '',
+        loop_duration: loopMode === 'duration' ? Number(loopMinutes) : 0,
+      });
+      console.log(resp.data);
+      showToast('Saved to history', 'success');
+      void refreshHistoryWithCurrentSort();
+    } catch (err) {
+      console.error('Error saving looped song:', err);
+      showToast("Couldn't save. Try again.", 'error');
+    } finally {
+      setIsSaving(false);
     }
 
     // If the same video is already loaded, reset and play from start
@@ -758,7 +759,7 @@ export default function Home() {
           </button>
         </form>
         {videoId && (
-          <div className="mt-12 flex flex-col items-center justify-center w-full">
+          <div className="mt-12 mb-16 flex flex-col items-center justify-center w-full sm:mb-20">
             {isLooping && (
               <div className="mb-2 text-blue-600 text-center text-s font-light">
                 {submittedRepeatCountNumber > 0

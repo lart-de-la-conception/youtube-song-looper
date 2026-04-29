@@ -261,6 +261,8 @@ describe('Home page', () => {
   });
 
   it('stops looping after the selected repeat count', async () => {
+    mockedAxios.post.mockResolvedValue({ data: {} } as any);
+
     render(<Home />);
     fireEvent.click(screen.getByRole('button', { name: /Repeat count/i }));
     fireEvent.change(screen.getByLabelText(/Repeat Count/i), { target: { value: '2' } });
@@ -298,7 +300,10 @@ describe('Home page', () => {
 
     expect(seekTo).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Play 2 \/ 2/i)).not.toBeInTheDocument();
-    expect(mockedAxios.post).not.toHaveBeenCalled();
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      expect.stringContaining('/api/saveloopedsong'),
+      expect.objectContaining({ video_id: 'abcdefghijk', loop_duration: 0 }),
+    );
   });
 });
 
