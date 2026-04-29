@@ -460,12 +460,12 @@ export default function Home() {
   const renderHistoryItem = (item: LoopedSong) => {
     const thumb = `https://img.youtube.com/vi/${item.video_id}/hqdefault.jpg`;
     return (
-      <div key={item.id} className="flex w-full min-w-0 items-center gap-1.5 sm:gap-2">
+      <div key={item.id} className="flex w-full min-w-0 items-center gap-2">
         <button
           onClick={() => loadFromHistory(item)}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded p-1.5 text-left transition hover:bg-gray-100 sm:gap-3 sm:p-2"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md p-2 text-left transition hover:bg-gray-100 sm:gap-3"
         >
-          <img src={thumb} alt={item.title} className="h-9 w-14 shrink-0 rounded object-cover sm:h-10 sm:w-16" />
+          <img src={thumb} alt={item.title} className="h-10 w-16 shrink-0 rounded object-cover" />
           <div className="min-w-0 flex-1">
             <div className="text-sm text-black line-clamp-2">{item.title}</div>
             <div className="text-xs text-gray-500">{item.loop_duration} min</div>
@@ -475,7 +475,7 @@ export default function Home() {
         <button
           aria-label="Toggle favorite"
           onClick={(e) => { e.stopPropagation(); toggleFavorite(item); }}
-          className="shrink-0 rounded p-1.5 transition hover:bg-gray-100 sm:p-2"
+          className="shrink-0 rounded-md p-2 transition hover:bg-gray-100"
         >
           {item.is_favorite ? (
             <MdStar className="text-yellow-500" size={16} />
@@ -486,7 +486,7 @@ export default function Home() {
         <button
           aria-label="Delete"
           onClick={(e) => { e.stopPropagation(); deleteHistoryItem(item); }}
-          className="shrink-0 rounded p-1.5 transition hover:bg-gray-100 sm:p-2"
+          className="shrink-0 rounded-md p-2 transition hover:bg-gray-100"
         >
           <MdDelete className="text-gray-400" size={16} />
         </button>
@@ -544,12 +544,12 @@ export default function Home() {
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 sm:px-5">
           <div className="mb-2 shrink-0">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               <button
                 type="button"
                 aria-pressed={sortBy === 'recent'}
                 onClick={() => setSortBy('recent')}
-                className={`px-4 py-2.5 text-xs rounded border transition ${
+                className={`w-full rounded border px-3 py-2.5 text-xs transition sm:w-auto sm:px-4 ${
                   sortBy === 'recent'
                     ? 'bg-black text-white border-black'
                     : 'bg-white text-black border-gray-200 hover:bg-gray-50'
@@ -561,7 +561,7 @@ export default function Home() {
                 type="button"
                 aria-pressed={sortBy === 'plays'}
                 onClick={() => setSortBy('plays')}
-                className={`px-4 py-2.5 text-xs rounded border transition ${
+                className={`w-full rounded border px-3 py-2.5 text-xs transition sm:w-auto sm:px-4 ${
                   sortBy === 'plays'
                     ? 'bg-black text-white border-black'
                     : 'bg-white text-black border-gray-200 hover:bg-gray-50'
@@ -573,7 +573,7 @@ export default function Home() {
                 type="button"
                 aria-pressed={sortBy === 'added'}
                 onClick={() => setSortBy('added')}
-                className={`px-4 py-2.5 text-xs rounded border transition ${
+                className={`col-span-2 w-full rounded border px-3 py-2.5 text-xs transition sm:col-span-1 sm:w-auto sm:px-4 ${
                   sortBy === 'added'
                     ? 'bg-black text-white border-black'
                     : 'bg-white text-black border-gray-200 hover:bg-gray-50'
@@ -585,14 +585,14 @@ export default function Home() {
 
             {/* Undo deleted items banner (batch) */}
             {Object.keys(pendingUndos).length > 0 && (
-              <div className="mt-3 flex items-center justify-between rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-800">
-                <span>
+              <div className="mt-3 flex flex-col items-start gap-2 rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-800 sm:flex-row sm:items-center sm:justify-between">
+                <span className="leading-snug">
                   Removed {Object.keys(pendingUndos).length} item{Object.keys(pendingUndos).length > 1 ? 's' : ''}. Press Undo if it was a mistake.
                 </span>
                 <button
                   type="button"
                   onClick={undoAllDeletes}
-                  className="ml-3 rounded bg-black px-2 py-1 text-xs text-white hover:bg-black/80"
+                  className="rounded bg-black px-2 py-1 text-xs text-white hover:bg-black/80 sm:ml-3"
                 >
                   Undo
                 </button>
@@ -622,7 +622,7 @@ export default function Home() {
         </div>
       </aside>
 
-      <header className="relative flex w-full flex-col items-center justify-center px-4 pb-8 pt-4 sm:px-6 sm:py-10 md:px-8">
+      <header className="relative flex w-full flex-col items-center justify-center px-4 pb-6 pt-3 sm:px-6 sm:py-10 md:px-8">
         <button
           type="button"
           aria-label="Open history"
@@ -643,8 +643,8 @@ export default function Home() {
           When one listen isn't enough ...
         </p>
       </header>
-      <section className="flex flex-col items-center justify-start px-4 pt-8">
-        <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-md text-black">
+      <section className="flex flex-col items-center justify-start px-3 pb-6 pt-5 sm:px-4 sm:pt-8">
+        <form onSubmit={handleSubmit} className="w-full max-w-md space-y-5 text-black sm:space-y-6">
           <div>
             <span className="block text-sm mb-1 text-gray-700 tracking-wide font-sans font-bold text-gray-900 uppercase">
               Loop Type
@@ -657,7 +657,7 @@ export default function Home() {
                   setLoopMode('duration');
                   setError('');
                 }}
-                className={`rounded border px-4 py-2.5 text-sm font-sans font-bold uppercase tracking-wide transition ${
+                className={`rounded border px-3 py-2.5 text-xs font-sans font-bold uppercase tracking-wide transition sm:px-4 sm:text-sm ${
                   loopMode === 'duration'
                     ? 'bg-black text-white border-black'
                     : 'bg-white text-black border-gray-200 hover:bg-gray-50'
@@ -672,7 +672,7 @@ export default function Home() {
                   setLoopMode('repeat');
                   setError('');
                 }}
-                className={`rounded border px-4 py-2.5 text-sm font-sans font-bold uppercase tracking-wide transition ${
+                className={`rounded border px-3 py-2.5 text-xs font-sans font-bold uppercase tracking-wide transition sm:px-4 sm:text-sm ${
                   loopMode === 'repeat'
                     ? 'bg-black text-white border-black'
                     : 'bg-white text-black border-gray-200 hover:bg-gray-50'
@@ -759,7 +759,7 @@ export default function Home() {
           </button>
         </form>
         {videoId && (
-          <div className="mt-12 mb-16 flex flex-col items-center justify-center w-full sm:mb-20">
+          <div className="mb-16 mt-10 flex w-full flex-col items-center justify-center sm:mb-20 sm:mt-12">
             {isLooping && (
               <div className="mb-2 text-blue-600 text-center text-s font-light">
                 {submittedRepeatCountNumber > 0
@@ -767,8 +767,8 @@ export default function Home() {
                   : `Looping for ${formatTime(elapsedTime)} / ${submittedLoopMinutes ? `${submittedLoopMinutes}:00` : ''}`}
               </div>
             )}
-            <div className="flex w-full justify-center">
-              <div className="aspect-video w-full max-w-[640px] overflow-hidden rounded-lg">
+            <div className="flex w-full justify-center px-1 sm:px-0">
+              <div className="aspect-video w-full max-w-[640px] overflow-hidden rounded-lg shadow-sm">
               <YouTube
                 className="h-full w-full"
                 iframeClassName="h-full w-full"
