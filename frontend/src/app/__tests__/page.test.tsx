@@ -305,6 +305,44 @@ describe('Home page', () => {
       expect.objectContaining({ video_id: 'abcdefghijk', loop_duration: 0 }),
     );
   });
+
+  it('does not reuse old repeat count after switching back to duration mode', async () => {
+    mockedAxios.post.mockResolvedValue({ data: {} } as any);
+
+    render(<Home />);
+
+    // First set a repeat count.
+    fireEvent.click(screen.getByRole('button', { name: /Repeat count/i }));
+    fireEvent.change(screen.getByLabelText(/Repeat Count/i), { target: { value: '3' } });
+
+    // Then switch to duration mode and submit.
+    fireEvent.click(screen.getByRole('button', { name: /Duration/i }));
+    fireEvent.change(screen.getByLabelText(/Loop Duration/i), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText(/YouTube Video URL/i), {
+      target: { value: 'https://www.youtube.com/watch?v=abcdefghijk' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Load & Loop/i }));
+
+    expect(await screen.findByTestId('yt-player')).toBeInTheDocument();
+
+    const seekTo = jest.fn();
+    const playVideo = jest.fn();
+
+    await act(async () => {
+      (global as any).__ytProps.onReady({ target: { seekTo, playVideo } });
+    });
+
+    // In duration mode with a long target, each end event should continue looping.
+    await act(async () => {
+      (global as any).__ytProps.onEnd({ target: { seekTo, playVideo } });
+      (global as any).__ytProps.onStateChange({ data: 1 });
+      (global as any).__ytProps.onEnd({ target: { seekTo, playVideo } });
+      (global as any).__ytProps.onStateChange({ data: 1 });
+      (global as any).__ytProps.onEnd({ target: { seekTo, playVideo } });
+    });
+
+    expect(seekTo).toHaveBeenCalledTimes(3);
+  });
 });
 
 

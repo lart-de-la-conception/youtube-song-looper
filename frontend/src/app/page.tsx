@@ -33,6 +33,7 @@ export default function Home() {
   const API_URL = getApiUrl();
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [loopMode, setLoopMode] = useState<'duration' | 'repeat'>('duration');
+  const [submittedLoopMode, setSubmittedLoopMode] = useState<'duration' | 'repeat'>('duration');
   const [loopMinutes, setLoopMinutes] = useState('');
   const [submittedLoopMinutes, setSubmittedLoopMinutes] = useState('');
   const [repeatCount, setRepeatCount] = useState('');
@@ -261,22 +262,12 @@ export default function Home() {
     const totalMs = timePassed + sessionMs;
     const nextCompletedPlays = completedPlays + 1;
 
-    // Prefer submitted duration; fall back to current input
-    const targetMs =
-      Number(submittedLoopMinutes) > 0
-        ? Number(submittedLoopMinutes) * 60 * 1000
-        : Number(loopMinutes) > 0
-        ? Number(loopMinutes) * 60 * 1000
-        : 0;
-    const targetPlayCount =
-      submittedRepeatCountNumber > 0
-        ? submittedRepeatCountNumber
-        : Number(repeatCount) > 0
-        ? Number(repeatCount)
-        : 0;
+    // Use the mode/value captured at submit time to avoid hidden-input state leaks.
+    const targetMs = Number(submittedLoopMinutes) > 0 ? Number(submittedLoopMinutes) * 60 * 1000 : 0;
+    const targetPlayCount = submittedRepeatCountNumber > 0 ? submittedRepeatCountNumber : 0;
     const shouldContinueLoop =
-      targetPlayCount > 0
-        ? nextCompletedPlays < targetPlayCount
+      submittedLoopMode === 'repeat'
+        ? targetPlayCount > 0 && nextCompletedPlays < targetPlayCount
         : targetMs > 0 && totalMs < targetMs;
 
     // Accumulate the finished session and clear current session start
@@ -313,6 +304,7 @@ export default function Home() {
       return;
     }
     setError('');
+    setSubmittedLoopMode(loopMode);
     setSubmittedLoopMinutes(loopMode === 'duration' ? loopMinutes : '');
     setSubmittedRepeatCount(loopMode === 'repeat' ? repeatCount : '');
 
@@ -420,6 +412,7 @@ export default function Home() {
     setVideoTitle(item.title);
     const minutes = String(item.loop_duration ?? '');
     setLoopMode('duration');
+    setSubmittedLoopMode('duration');
     setLoopMinutes(minutes);
     setSubmittedLoopMinutes(minutes);
     setRepeatCount('');
